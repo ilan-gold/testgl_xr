@@ -20,26 +20,18 @@
         mode: "r"
       };
       const stride = tileSize * tileSize * 3
-      if(zarrImagePyramidArray[zarrZoom] && zarrMetaData[zarrZoom]){
-        const rowStride = stride * zarrMetaData[zarrZoom].width
-        var arrSlice = zarr.slice((y * rowStride) + (x * stride), (y * rowStride) + ((x + 1) * stride));
-        return zarrImagePyramidArray[zarrZoom].get([arrSlice,]).then((dataSlice) => { return dataSlice })
-      } else{
-        var arrSlice;
-        var getMetadata = fetch(`${config.store}${config.path}/.zattrs`).then(response => response.json()).then((data) => {
-          zarrMetaData[zarrZoom] = {height: data.height, width: data.width};
-          const rowStride = stride * zarrMetaData[zarrZoom].width
-          arrSlice = zarr.slice((y * rowStride) + (x * stride), (y * rowStride) + ((x + 1) * stride));
-          return getDataSlice
-        })
-        var getDataSlice = zarr.openArray(config).then((arr) => {
-          zarrImagePyramidArray[zarrZoom] = arr
-          return arr.get([arrSlice,])
-        }).then((dataSlice) => {
-          return dataSlice
-        });
-        return getMetadata
-      }
+      var arrSlice;
+      var getMetadata = fetch(`${config.store}${config.path}/.zattrs`).then(response => response.json()).then((data) => {
+        const rowStride = stride * data.width
+        arrSlice = zarr.slice((y * rowStride) + (x * stride), (y * rowStride) + ((x + 1) * stride));
+        return getDataSlice
+      })
+      var getDataSlice = zarr.openArray(config).then((arr) => {
+        return arr.get([arrSlice,])
+      }).then((dataSlice) => {
+        return dataSlice
+      });
+      return getMetadata
     }
     function main(arr) {
       const gl = document.querySelector('canvas').getContext('webgl2');
