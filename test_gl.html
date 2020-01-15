@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html>
+
+<body>
+  <script src="https://twgljs.org/dist/4.x/twgl-full.min.js"></script>
+  <script src="https://unpkg.com/zarr/dist/zarr.umd.js"></script>
+  <canvas height=512 width=512></canvas>
+  <script type="text/javascript">
+    function loadZarr() {
+      var zarrImagePyramidArray = [];
+      var zarrMetaData = [];
+      var z = -6;
+      var x = 0;
+      var y = 0;
+      var tileSize = 512;
+      var zarrZoom = z * -1
+      const config = {
+        store: "https://localhost:5000/",
+        path: `pyramid_${zarrZoom}.zarr`,
+        mode: "r"
+      };
+      const stride = tileSize * tileSize * 3
+      if(zarrImagePyramidArray[zarrZoom] && zarrMetaData[zarrZoom]){
+        const rowStride = stride * zarrMetaData[zarrZoom].width
+        var arrSlice = zarr.slice((y * rowStride) + (x * stride), (y * rowStride) + ((x + 1) * stride));
+        return zarrImagePyramidArray[zarrZoom].get([arrSlice,]).then((dataSlice) => { return dataSlice })
+      } else{
+        var arrSlice;
+        var getMetadata = fetch(`${config.store}${config.path}/.zattrs`).then(response => response.json()).then((data) => {
+          zarrMetaData[zarrZoom] = {height: data.height, width: data.width};
+          const rowStride = stride * zarrMetaData[zarrZoom].width
+          arrSlice = zarr.slice((y * rowStride) + (x * stride), (y * rowStride) + ((x + 1) * stride));
+          return getDataSlice
+        })
+        var getDataSlice = zarr.openArray(config).then((arr) => {
+          zarrImagePyramidArray[zarrZoom] = arr
+          return arr.get([arrSlice,])
+        }).then((dataSlice) => {
+          return dataSlice
+        });
+        return getMetadata
+      }
+    }
+    function main(arr) {
+      const gl = document.querySelector('canvas').getContext('webgl2');
+
+      const vs = `#version 300 es
+      void main() {
+        gl_PointSize = 300.0;
+        gl_Position = vec4(0, 0, 0, 1);
+      }
+      `;
+      const fs = `#version 300 es
+      precision highp float;
+      precision highp int;
+      precision highp usampler2D;
+
+
+      // our texture
+      uniform usampler2D u_image;
+      // range
+      uniform uint max_val;
+      uniform uint min_val;
+
+      out vec4 color;
+
+      void main() {
+        uvec4 intColor = texture(u_image, gl_PointCoord.xy);
+        uint rangeu = max_val - min_val;
+        float rangef =  float(rangeu);
+        color = vec4(vec3(intColor.rgb - min_val) / rangef, 1);
+      }
+      `;
+      const program = twgl.createProgram(gl, [vs, fs]);
+      var max_val = gl.getUniformLocation(program, "max_val");
+      var min_val = gl.getUniformLocation(program, "min_val");
+      const tex = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      gl.texImage2D(
+          gl.TEXTURE_2D,
+          0,               // ?
+          gl.RGB32UI,         // internal format
+          512,              // width
+          512,               // height
+          0,               // border
+          gl.RGB_INTEGER,  // source format
+          gl.UNSIGNED_INT,        // source type
+          new Uint32Array(arr.data) //data
+      )
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+
+      gl.useProgram(program);
+      gl.uniform1ui(max_val, 255)
+      gl.uniform1ui(min_val, 0)
+      gl.drawArrays(gl.POINTS, 0, 1);
+    }
+    loadZarr().then((arr) => main(arr));
+  </script>
+</body>
+
+</html>
