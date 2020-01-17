@@ -3,33 +3,33 @@
 
 <body>
   <script src="https://twgljs.org/dist/4.x/twgl-full.min.js"></script>
-  <script src="https://unpkg.com/zarr/dist/zarr.umd.js"></script>
+  <script src="https://unpkg.com/zarr@0.1.4/dist/zarr.umd.js"></script>
   <canvas height=512 width=512></canvas>
   <script type="text/javascript">
+  var tileSize;
     function loadZarr() {
-      var z = -6;
-      var x = 0;
-      var y = 0;
-      var tileSize = 512;
+      var z = 0;
+      var x = 5;
+      var y = 150;
+      tileSize = 256;
       var zarrZoom = z * -1
       const config = {
-        store: "https://localhost:5000/",
-        path: `pyramid_${zarrZoom}.zarr`,
+        store: "https://vitessce-data.s3.amazonaws.com/test-data/vanderbilt-data/img_pyramid/",
+        path: `pyramid_6.zarr`,
         mode: "r"
       };
-      const stride = tileSize * tileSize * 3
-      var arrSlice;
-      var getMetadata = fetch(`${config.store}${config.path}/.zattrs`).then(response => response.json()).then((data) => {
-        const rowStride = stride * data.width
-        arrSlice = zarr.slice((y * rowStride) + (x * stride), (y * rowStride) + ((x + 1) * stride));
-        return getDataSlice
-      })
+      var arrSlice = zarr.slice(tileSize * tileSize * 3 * 5, tileSize * tileSize * 6 * 3);
+      // var getMetadata = fetch(`${config.store}${config.path}/.zattrs`).then(response => response.json()).then((data) => {
+      //   const rowStride = stride * data.width
+      //   arrSlice = zarr.slice(0, 150 * 180 * 3);
+      //   return getDataSlice
+      // })
       var getDataSlice = zarr.openArray(config).then((arr) => {
         return arr.get([arrSlice,])
       }).then((dataSlice) => {
         return dataSlice
       });
-      return getMetadata
+      return getDataSlice
     }
     function main(arr) {
       const gl = document.querySelector('canvas').getContext('webgl2');
@@ -58,7 +58,7 @@
         uvec4 intColor = texture(u_image, gl_PointCoord.xy);
         uint rangeu = max_val - min_val;
         float rangef =  float(rangeu);
-        color = vec4(vec3(intColor.rgb - min_val) / rangef, 1);
+        color = vec4(vec3(intColor.r, intColor.g, intColor.b) / rangef, 1);
       }
       `;
       const program = twgl.createProgram(gl, [vs, fs]);
@@ -66,24 +66,39 @@
       var min_val = gl.getUniformLocation(program, "min_val");
       const tex = gl.createTexture();
       gl.bindTexture(gl.TEXTURE_2D, tex);
-      gl.texImage2D(
-          gl.TEXTURE_2D,
-          0,               // ?
-          gl.RGB32UI,         // internal format
-          512,              // width
-          512,               // height
-          0,               // border
-          gl.RGB_INTEGER,  // source format
-          gl.UNSIGNED_INT,        // source type
-          new Uint32Array(arr.data) //data
-      )
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+      var val1 = 0;
+      render();
+      function render(){
+        setTimeout(()=>{
+          gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+          gl.texImage2D(
+              gl.TEXTURE_2D,
+              0,               // ?
+              gl.RGB16UI,         // internal format
+              tileSize,              // width
+              tileSize,               // height
+              0,               // border
+              gl.RGB_INTEGER,  // source format
+              gl.UNSIGNED_SHORT,        // source type
+              arr.data //data
+          )
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
 
-      gl.useProgram(program);
-      gl.uniform1ui(max_val, 255)
-      gl.uniform1ui(min_val, 0)
-      gl.drawArrays(gl.POINTS, 0, 1);
+          gl.useProgram(program);
+          gl.uniform1ui(max_val, val1)
+          gl.uniform1ui(min_val, 0)
+          gl.drawArrays(gl.POINTS, 0, 1);
+          if(val1 < 2**16) {
+            val1 = val1 + 100
+          } else{
+            val1 = 0
+          }
+
+
+          requestAnimationFrame(render)
+        }, 10)
+      }
     }
     loadZarr().then((arr) => main(arr));
   </script>
